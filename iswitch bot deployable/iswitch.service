@@ -1,0 +1,15 @@
+[Unit]
+Description=iSwitch Telegram Commerce Bot Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/iswitch_store
+ExecStart=/var/www/iswitch_store/venv/bin/python run.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/var/www/iswitch_store/.env
+
+[Install]
+WantedBy=multi-user.target

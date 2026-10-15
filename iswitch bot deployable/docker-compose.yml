@@ -1,0 +1,10 @@
+services:
+  iswitch-bot:
+    build: .
+    container_name: iswitch_telegram_store
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      # Persist SQLite database, uploaded customer receipts, and media
+      - ./data:/app/data

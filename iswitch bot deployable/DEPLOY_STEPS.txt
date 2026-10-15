@@ -1,0 +1,67 @@
+================================================================================
+  iSWITCH TELEGRAM STORE - RENDER DEPLOYMENT INSTRUCTIONS
+================================================================================
+
+This project is 100% production-ready for deployment on Render.
+It includes automatic support for:
+- Render Web Service (Runs FREE with automatic healthcheck endpoint on /health)
+- Render Background Worker (Paid tier)
+- Docker & local execution
+
+--------------------------------------------------------------------------------
+OPTION 1: DEPLOY VIA GITHUB TO RENDER (RECOMMENDED - 2 MINUTES)
+--------------------------------------------------------------------------------
+
+1. Push this folder to your GitHub account:
+   git init
+   git add .
+   git commit -m "iSwitch Telegram Store Bot Production Ready"
+   git branch -M main
+   git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+   git push -u origin main
+
+2. Go to https://dashboard.render.com
+   Click "New +" -> "Web Service" (or "Blueprint" using render.yaml)
+
+3. Connect your GitHub repository.
+
+4. Configure Service Settings:
+   - Name: iswitch-telegram-bots
+   - Runtime: Python 3
+   - Build Command: pip install -r requirements.txt
+   - Start Command: python main.py
+   - Plan: Free (or Starter if you want 24/7 persistent worker)
+
+5. Add Environment Variables (Under "Environment" tab):
+   - CUSTOMER_BOT_TOKEN = (Your Customer Bot token from @BotFather)
+   - ADMIN_BOT_TOKEN    = (Your Admin Bot token from @BotFather)
+   - ADMIN_USER_IDS     = 742368838,8798202536
+   - TELEGRAM_CHANNEL   = @iSwitch0
+   - PYTHON_VERSION     = 3.11.9
+
+6. (Optional) Health Check Path:
+   - Set "Health Check Path" to: /health
+
+7. Click "Deploy Web Service"!
+   Render will automatically install requirements, bind to port,
+   and both bots will connect to Telegram and start listening.
+
+--------------------------------------------------------------------------------
+OPTION 2: ONE-CLICK BLUEPRINT DEPLOY (render.yaml)
+--------------------------------------------------------------------------------
+If you connect your repository using Render Blueprints:
+1. Render will automatically detect `render.yaml` in this folder.
+2. It will prompt you only for CUSTOMER_BOT_TOKEN and ADMIN_BOT_TOKEN.
+3. Click "Apply" and it will deploy everything automatically!
+
+--------------------------------------------------------------------------------
+VERIFYING DEPLOYMENT
+--------------------------------------------------------------------------------
+Check your Render deploy logs:
+You will see:
+[iswitch.main] - INFO - Database initialized successfully.
+[iswitch.main] - INFO - Healthcheck HTTP server running on 0.0.0.0:10000 (Render Web Service Ready)
+[iswitch.main] - INFO - Both Customer Bot and Admin Bot are ONLINE and listening for updates!
+
+Now open Telegram and send /start to your Customer Bot and Admin Bot!
+================================================================================
