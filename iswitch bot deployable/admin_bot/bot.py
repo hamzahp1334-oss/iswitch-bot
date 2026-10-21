@@ -32,9 +32,9 @@ from admin_bot.handlers.orders import (
     view_receipt_photo_admin
 )
 from admin_bot.handlers.sync import (
-    sync_panel_view, start_sync_callback, pause_sync_callback,
-    resume_sync_callback, cancel_sync_callback, retry_sync_callback,
-    prompt_json_export_upload, handle_json_file_upload
+    sync_panel_view, start_sync_callback, start_full_sync_callback,
+    pause_sync_callback, resume_sync_callback, cancel_sync_callback,
+    retry_sync_callback, prompt_json_export_upload, handle_json_file_upload
 )
 from admin_bot.handlers.customers import (
     customers_menu, customer_view_admin, prompt_customer_search,
@@ -226,6 +226,7 @@ def create_admin_bot_app() -> Application:
 
     # Sync Callbacks
     app.add_handler(CallbackQueryHandler(sync_panel_view, pattern="^adm_sync$"))
+    app.add_handler(CallbackQueryHandler(start_full_sync_callback, pattern="^adm_sync_full$"))
     app.add_handler(CallbackQueryHandler(start_sync_callback, pattern="^adm_sync_start$"))
     app.add_handler(CallbackQueryHandler(pause_sync_callback, pattern="^adm_sync_pause$"))
     app.add_handler(CallbackQueryHandler(resume_sync_callback, pattern="^adm_sync_resume$"))

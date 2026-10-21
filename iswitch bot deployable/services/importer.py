@@ -15,12 +15,32 @@ from database.crud import (
     get_category_by_slug, get_product_by_source, create_product,
     update_product, add_product_image, record_channel_message,
     get_last_scanned_message_id, set_last_scanned_message_id,
-    get_channel_sync_stats
+    get_channel_sync_stats, clear_product_images
 )
 from services.parser import channel_parser, ParsedProduct
 from services.storage import storage_service
 
 logger = logging.getLogger("iswitch.importer")
+
+async def fetch_live_channel_photo(channel: str, message_id: int) -> Optional[str]:
+    """Dynamically fetches the latest working photo URL from the public Telegram channel embed."""
+    try:
+        clean_chan = channel.lstrip("@")
+        for mid in [message_id, message_id - 1, message_id + 1]:
+            embed_url = f"https://t.me/{clean_chan}/{mid}?embed=1"
+            req = urllib.request.Request(
+                embed_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                html = resp.read().decode("utf-8")
+            photos = re.findall(r"background-image:url\('([^']+)'\)", html)
+            valid_photos = [p for p in photos if "cdn" in p or "telesco.pe" in p]
+            if valid_photos:
+                return valid_photos[0]
+    except Exception as e:
+        logger.debug(f"Could not live fetch photo for {channel}/{message_id}: {e}")
+    return None
 
 class ChannelImporter:
     def __init__(self):
@@ -185,11 +205,15 @@ class ChannelImporter:
             await update_product(prod_id, **update_data)
             self.products_updated += 1
 
-            # Attach media if not already attached
+            # Attach fresh media and clean up any old broken image paths
             if media_urls_or_files:
+                cleared_old = False
                 for idx, m_url in enumerate(media_urls_or_files):
                     saved_path = await self._download_and_save_image(m_url, prod_id)
                     if saved_path:
+                        if not cleared_old:
+                            await clear_product_images(prod_id)
+                            cleared_old = True
                         await add_product_image(
                             product_id=prod_id,
                             file_path=saved_path,
@@ -414,6 +438,18 @@ class ChannelImporter:
                         # Extract background-image:url('...')
                         photos = re.findall(r"background-image:url\('([^']+)'\)", block_text)
                         photo_urls = [p for p in photos if "cdn" in p or "telesco.pe" in p]
+
+                    # If no photos found in message block, check adjacent album posts
+                    if not photo_urls:
+                        for n_id in [msg_id - 1, msg_id + 1]:
+                            n_pattern = rf'data-post="[^\"]+/{n_id}".*?(?=data-post=|$)'
+                            n_match = re.search(n_pattern, html_content, re.DOTALL)
+                            if n_match:
+                                n_photos = re.findall(r"background-image:url\('([^']+)'\)", n_match.group(0))
+                                valid_n = [p for p in n_photos if "cdn" in p or "telesco.pe" in p]
+                                if valid_n:
+                                    photo_urls = valid_n
+                                    break
 
                     # Parse and save
                     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")

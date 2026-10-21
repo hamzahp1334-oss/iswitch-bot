@@ -1,15 +1,19 @@
 import os
 import logging
+from pathlib import Path
 from telegram import Update, InputMediaPhoto
 from telegram.ext import ContextTypes
+from config import MEDIA_DIR, TELEGRAM_CHANNEL
 from database.crud import (
     get_all_categories, get_category_by_slug, list_products,
-    get_product_by_id, get_product_images
+    get_product_by_id, get_product_images, update_product_image_telegram_id,
+    add_product_image
 )
 from customer_bot.keyboards import (
     categories_keyboard, products_list_keyboard, product_detail_keyboard
 )
 from services.ui_utils import safe_edit_or_send
+from services.importer import fetch_live_channel_photo
 
 logger = logging.getLogger("iswitch.cust.catalog")
 
@@ -128,61 +132,111 @@ async def product_view(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = "\n".join(lines)
     keyboard = product_detail_keyboard(prod, in_cart_qty=in_cart_qty)
 
-    # Images
+    # Images resolution & sending
     images = await get_product_images(prod_id)
     chat_id = update.effective_chat.id
+    photo_sent = False
 
-    # If product has images, send with photo
+    # 1. Try sending from existing images records
     if images:
-        primary_img = images[0]
-        file_path = primary_img.get("file_path")
-        file_url = primary_img.get("file_url")
+        for img in images:
+            telegram_file_id = img.get("telegram_file_id")
+            file_path = img.get("file_path")
+            file_url = img.get("file_url")
 
-        telegram_file_id = primary_img.get("telegram_file_id")
+            # 1a. Try cached Telegram File ID (instant, zero bandwidth)
+            if telegram_file_id:
+                try:
+                    await context.bot.send_photo(
+                        chat_id=chat_id,
+                        photo=telegram_file_id,
+                        caption=caption,
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
+                    photo_sent = True
+                    break
+                except Exception:
+                    pass
 
-        if file_path and os.path.exists(file_path):
-            with open(file_path, "rb") as pf:
-                await context.bot.send_photo(
-                    chat_id=chat_id,
-                    photo=pf,
-                    caption=caption,
-                    parse_mode="Markdown",
-                    reply_markup=keyboard
-                )
-                return
-        elif telegram_file_id:
+            # 1b. Try local file path (check direct path, then MEDIA_DIR / filename)
+            if file_path:
+                target_file = Path(file_path)
+                if not target_file.exists():
+                    target_file = MEDIA_DIR / target_file.name
+                if target_file.exists():
+                    try:
+                        with open(target_file, "rb") as pf:
+                            sent_msg = await context.bot.send_photo(
+                                chat_id=chat_id,
+                                photo=pf,
+                                caption=caption,
+                                parse_mode="Markdown",
+                                reply_markup=keyboard
+                            )
+                            photo_sent = True
+                            if sent_msg.photo:
+                                await update_product_image_telegram_id(img["image_id"], sent_msg.photo[-1].file_id)
+                            break
+                    except Exception as fe:
+                        logger.warning(f"Error sending local photo {target_file}: {fe}")
+
+            # 1c. Try file_url
+            if file_url:
+                try:
+                    sent_msg = await context.bot.send_photo(
+                        chat_id=chat_id,
+                        photo=file_url,
+                        caption=caption,
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
+                    photo_sent = True
+                    if sent_msg.photo:
+                        await update_product_image_telegram_id(img["image_id"], sent_msg.photo[-1].file_id)
+                    break
+                except Exception:
+                    pass
+
+    # 2. If photo not sent yet, auto-fetch LIVE channel photo on the fly!
+    if not photo_sent and prod.get("source_message_id"):
+        channel = prod.get("source_channel") or TELEGRAM_CHANNEL
+        mid = prod.get("source_message_id")
+        live_photo_url = await fetch_live_channel_photo(channel, mid)
+        if live_photo_url:
             try:
-                await context.bot.send_photo(
+                sent_msg = await context.bot.send_photo(
                     chat_id=chat_id,
-                    photo=telegram_file_id,
+                    photo=live_photo_url,
                     caption=caption,
                     parse_mode="Markdown",
                     reply_markup=keyboard
                 )
-                return
-            except Exception:
-                pass
-        elif file_url:
-            try:
-                await context.bot.send_photo(
-                    chat_id=chat_id,
-                    photo=file_url,
-                    caption=caption,
-                    parse_mode="Markdown",
-                    reply_markup=keyboard
-                )
-                return
-            except Exception:
-                pass
+                photo_sent = True
+                if sent_msg.photo:
+                    cached_file_id = sent_msg.photo[-1].file_id
+                    if images:
+                        await update_product_image_telegram_id(images[0]["image_id"], cached_file_id)
+                    else:
+                        await add_product_image(
+                            product_id=prod_id,
+                            file_path="",
+                            file_url=live_photo_url,
+                            telegram_file_id=cached_file_id,
+                            is_primary=1
+                        )
+            except Exception as le:
+                logger.warning(f"Live photo fetch send failed for prod {prod_id}: {le}")
 
-    # Fallback to text message
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=caption,
-        parse_mode="Markdown",
-        reply_markup=keyboard,
-        disable_web_page_preview=True
-    )
+    # 3. Fallback to text message only if no photo was found or sent
+    if not photo_sent:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=caption,
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+            disable_web_page_preview=True
+        )
 
 async def search_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

@@ -69,6 +69,28 @@ async def start_sync_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer("▶ Channel Synchronization started!")
     await sync_panel_view(update, context)
 
+async def start_full_sync_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global active_import_task
+    if not await verify_admin_access(update, context):
+        return
+
+    query = update.callback_query
+    if channel_importer.is_running:
+        await query.answer("Sync is already running!", show_alert=True)
+        return
+
+    admin_id = update.effective_user.id
+    channel = await get_setting("channel_username", TELEGRAM_CHANNEL)
+    channel_importer.channel_username = channel
+
+    await log_admin_action(admin_id, "start_full_channel_sync", "channel", channel, details="Admin initiated Full Zero-to-Hero Sync")
+
+    # Start in background scanning up to 150 batches
+    active_import_task = asyncio.create_task(channel_importer.import_from_web_pagination(max_pages=150, delay_seconds=0.6))
+
+    await query.answer("🚀 Full Sync (Zero to Hero) started!")
+    await sync_panel_view(update, context)
+
 async def pause_sync_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await verify_admin_access(update, context):
         return

@@ -475,6 +475,15 @@ async def add_product_image(product_id: int, file_path: str, is_primary: int = 0
 async def delete_product_image(image_id: int):
     await db.execute("DELETE FROM product_images WHERE image_id = ?;", (image_id,))
 
+async def update_product_image_telegram_id(image_id: int, telegram_file_id: str):
+    await db.execute(
+        "UPDATE product_images SET telegram_file_id = ? WHERE image_id = ?;",
+        (telegram_file_id, image_id)
+    )
+
+async def clear_product_images(product_id: int):
+    await db.execute("DELETE FROM product_images WHERE product_id = ?;", (product_id,))
+
 # ========================================================
 # ORDER OPERATIONS
 # ========================================================

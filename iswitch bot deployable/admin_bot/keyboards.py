@@ -208,11 +208,14 @@ def admin_sync_panel_keyboard(is_running: bool, is_paused: bool) -> InlineKeyboa
     buttons = []
     if not is_running:
         buttons.append([
-            InlineKeyboardButton("▶ Start Channel Sync (@iSwitch0)", callback_data="adm_sync_start"),
-            InlineKeyboardButton("📥 Import JSON Export File", callback_data="adm_sync_upload_json")
+            InlineKeyboardButton("🚀 Full Sync (Zero to Hero)", callback_data="adm_sync_full"),
+            InlineKeyboardButton("▶ Quick Sync (Recent)", callback_data="adm_sync_start")
         ])
         buttons.append([
-            InlineKeyboardButton("⚠️ Review Queue", callback_data="adm_prod_review_queue"),
+            InlineKeyboardButton("📥 Import JSON Export File", callback_data="adm_sync_upload_json"),
+            InlineKeyboardButton("⚠️ Review Queue", callback_data="adm_prod_review_queue")
+        ])
+        buttons.append([
             InlineKeyboardButton("🔄 Retry Failed", callback_data="adm_sync_retry")
         ])
     else:
